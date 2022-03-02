@@ -1,16 +1,16 @@
 # Distributed computing final project
-Final Project for CSC 369
 Krishna Kalakkad, Laura McGann, Ethan Waite, Ethan Zimbelman
 
 ## The Uber & Lyft cab prices dataset
 
 We are using the [Uber & Lyft cab prices dataset](https://www.kaggle.com/ravi72munde/uber-lyft-cab-prices).
 
-**For development**
+### For development
+
 A downloaded copy of this data can be found in `input/`. To automatically sync
 to the HDFS, run `./upload.sh` from the `input/` directory.
 
-Note: `/user/USERNAME/input` must not exist on the HDFS before running this!
+**Note**: `/user/USERNAME/input` must not exist on the HDFS before running this!
 
 ## Repo structure
 
