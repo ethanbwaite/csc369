@@ -27,8 +27,8 @@ This requires being able to calculate the distance between records, regardless o
 * Combine the numeric and categorical distance components using a weighted sum (i.e. linear combination) where the weights are the proportion of a full record that the numeric or categorical attributes compose.
 * For example, if a record contains 7 attributes total with 3 numeric and 4 categorical, the overall distance would be `3/7 * numeric_dist + 4/7 * catg_dist`
 ## Methods to Convert Continuous Numeric Attributes to Categorical
-1. Bucketing: establish ranges (buckets) across the whole numeric range and assign categorical labels to each bucket.
-  2. Ex: age --> child = 0-18, young_adult = 18-25, prime = 25-40, middle_age = 40-65, senior = 65+
+* Bucketing: establish ranges (buckets) across the whole numeric range and assign categorical labels to each bucket.
+  * Ex: age --> child = 0-18, young_adult = 18-25, prime = 25-40, middle_age = 40-65, senior = 65+
 ## Other Data Considerations
 * numeric data standardization (otherwise attributes with larger ranges can overshadow attributes with smaller ranges, even though the relative distance of the smaller-ranged attribute may be greater).
 # Proposed Distributed Implementation Concept
