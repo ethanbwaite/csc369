@@ -8,4 +8,4 @@ Initializing the repository with the dataset (March 1)
  - Ethan Zimbelman, 1 hour
 
 Prune input and create weather and ride objects (March 3)
- - Ethan Zimbelman, 3 hours
+ - Ethan Zimbelman, 2 hours
