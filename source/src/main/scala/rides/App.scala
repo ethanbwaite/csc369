@@ -7,12 +7,13 @@ import org.apache.spark.rdd._
 import org.apache.log4j.Logger
 import org.apache.log4j.Level
 import scala.collection._
+import scala.math._
 
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.Instant
 
-case class Ride(
+case class Ride (
   val distance: Float,
   val cabType: String,
   val day: String,
@@ -22,7 +23,7 @@ case class Ride(
   val price: Double,
   val surgeMultiplier: Double,
   val name: String
-);
+)
 
 case class Weather(
   val temp: Float,
@@ -34,9 +35,46 @@ case class Weather(
   val hour: Int,
   val humidity: Float,
   val wind: Float
-);
+)
 
 object App {
+  def weightedEuclideanDistance(values1: List[Any], values2: List[Any]): Double = {
+    val sumOfSquaredDifferences = (values1 zip values2).map({
+      case (v1: Int, v2: Int) => pow(v1 - v2, 2).toDouble
+      case (v1: Double, v2: Double) => pow(v1 - v2, 2).toDouble
+      case (v1: Float, v2: Float) => pow(v1 - v2, 2).toDouble
+      case _ => 0.0
+    }).sum
+    val numericFieldCount = values1.map({
+      case v: Int => 1
+      case v: Double => 1
+      case v: Float => 1
+      case _ => 0
+    }).reduce((x, y) => x+y)
+    return sqrt(sumOfSquaredDifferences) * (numericFieldCount.toDouble / values1.length.toDouble)
+  }
+
+  def weightedCategoricalDistance(values1: List[Any], values2: List[Any]): Double = {
+    val numberOfMismatches = (values1 zip values2).map({
+      case (v1: String, v2: String) => if (v1 != v2) 1 else 0
+      case _ => 0
+    }).sum
+    val categoricalFieldCount = values1.map({
+      case v: String => 1
+      case _ => 0
+    }).reduce((x, y) => x+y)
+    return numberOfMismatches.toDouble * (categoricalFieldCount.toDouble / values1.length.toDouble)
+  }
+
+  def getDistance(row1: Product, row2: Product): Double = {
+    // Calculates total distance based on all attributes in the Row object.
+    // Considers all Int, Double, Float as numeric
+    // Considers all Strings as categorical
+    val values1 = row1.productIterator.toList
+    val values2 = row2.productIterator.toList
+    return weightedEuclideanDistance(values1, values2) + weightedCategoricalDistance(values1, values2)
+  }
+
   def doubleOrDefault(f: String, default: Double): Double = {
     if (f == "") return default
     return f.toDouble
@@ -98,7 +136,13 @@ object App {
     val weather = sc.textFile("./input/weather.csv").map(parseWeather)
 
     // extremely basic example of using weather data
-    weather.collect().foreach(println)
+    val r1 = rides.take(1)(0)
+    val r2 = rides.take(2)(1)
+    println(r1)
+    println(r2)
+    println(getDistance(r1, r2))
+
+    // weather.collect().foreach(println)
     // rides.collect().foreach(println)
   }
 }
