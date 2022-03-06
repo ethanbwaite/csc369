@@ -9,3 +9,6 @@ Initializing the repository with the dataset (March 1)
 
 Prune input and create weather and ride objects (March 3)
  - Ethan Zimbelman, 2 hours
+
+Calculate euclidean + categorical distance between two rows (March 5)
+ - Ethan Waite, 2 hours
