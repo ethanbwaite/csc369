@@ -50,7 +50,7 @@ object App {
       case v: Double => 1
       case v: Float => 1
       case _ => 0
-    }).reduce((x, y) => x+y)
+    }).sum
     return sqrt(sumOfSquaredDifferences) * (numericFieldCount.toDouble / values1.length.toDouble)
   }
 
@@ -62,7 +62,7 @@ object App {
     val categoricalFieldCount = values1.map({
       case v: String => 1
       case _ => 0
-    }).reduce((x, y) => x+y)
+    }).sum
     return numberOfMismatches.toDouble * (categoricalFieldCount.toDouble / values1.length.toDouble)
   }
 
