@@ -79,14 +79,14 @@ object App {
 
     // categorical dist = # mismatches / # categorical attrbs = % mismatch (not x100% though)
     // wgtd categorical dist = dist * (# categorical attrbs / total len)
-    val dist = numberOfMismatches / categoricalFieldCount.toDouble
-    val wgtdDist = dist * (categoricalFieldCount.toDouble / values1.length.toDouble)
+    // simplified: wgtd categorical dist = # mismatches / total len
+    val dist = numberOfMismatches / values1.length.toDouble
 
     if (DEBUG) {
-      println(s"Mismatches: ${numberOfMismatches} / ${categoricalFieldCount} --> dist = " + f"${wgtdDist}%.2f")
+      println(s"Mismatches: ${numberOfMismatches} / ${categoricalFieldCount} --> dist = " + f"${dist}%.2f")
     }
 
-    return wgtdDist
+    return dist
   }
 
   def getDistance(row1: Product, row2: Product): Double = {
