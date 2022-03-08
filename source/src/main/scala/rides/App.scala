@@ -38,6 +38,8 @@ case class Weather(
 )
 
 object App {
+  val DEBUG = true
+
   def weightedEuclideanDistance(values1: List[Any], values2: List[Any]): Double = {
     val sumOfSquaredDifferences = (values1 zip values2).map({
       case (v1: Int, v2: Int) => pow(v1 - v2, 2).toDouble
@@ -55,10 +57,12 @@ object App {
   }
 
   def weightedCategoricalDistance(values1: List[Any], values2: List[Any]): Double = {
+    // count categorical attribute mismatches
     val numberOfMismatches = (values1 zip values2).map({
       case (v1: String, v2: String) => if (v1 != v2) 1 else 0
       case _ => 0
     }).sum
+    // count categorical attributes
     val categoricalFieldCount = values1.map({
       case v: String => 1
       case _ => 0

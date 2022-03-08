@@ -19,7 +19,7 @@ This requires being able to calculate the distance between records, regardless o
   * `sum(abs(r1_i - r2_i))`
 * cosine *similarity* (so do `1-cos_sim` to get the *distance*)
   * vector interpretation: `(r1 dot r2) / (norm(r1) * norm(r2))`
-  * practical internpretation: `sum(r1_i * r2_i) / (sum(r1_i ^ 2) * sum(r2_i ^ 2))`
+  * practical interpretation: `sum(r1_i * r2_i) / (sum(r1_i ^ 2) * sum(r2_i ^ 2))`
 ### Categorical Data
 * anti-dice: based on finding the number of mismatches in categorical attributes
   * returns `(# mismatches) / (total # categorical attributes)`
