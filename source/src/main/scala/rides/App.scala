@@ -38,6 +38,8 @@ case class Weather(
 )
 
 object App {
+  val DEBUG = true
+
   def weightedEuclideanDistance(values1: List[Any], values2: List[Any]): Double = {
     val sumOfSquaredDifferences = (values1 zip values2).map({
       case (v1: Int, v2: Int) => pow(v1 - v2, 2).toDouble
@@ -51,19 +53,40 @@ object App {
       case v: Float => 1
       case _ => 0
     }).reduce((x, y) => x+y)
-    return sqrt(sumOfSquaredDifferences) * (numericFieldCount.toDouble / values1.length.toDouble)
+
+    // numerical dist = sqrt(sum( (xi - yi)^2 ))
+    // wgtd numerical dist = dist * (# numerical attrbs / total len)
+    // TODO: standardize euclidean distance by range or z-score, else standardize all data to begin with
+    val dist = sqrt(sumOfSquaredDifferences) * (numericFieldCount.toDouble / values1.length.toDouble)
+
+    if (DEBUG) {
+      println("SSE = " + f"${sumOfSquaredDifferences}%.2f" + s" for ${numericFieldCount} elements --> dist = " + f"${dist}%.2f")
+    }
+    return dist
   }
 
   def weightedCategoricalDistance(values1: List[Any], values2: List[Any]): Double = {
+    // count categorical attribute mismatches
     val numberOfMismatches = (values1 zip values2).map({
       case (v1: String, v2: String) => if (v1 != v2) 1 else 0
       case _ => 0
     }).sum
+    // count categorical attributes
     val categoricalFieldCount = values1.map({
       case v: String => 1
       case _ => 0
     }).reduce((x, y) => x+y)
-    return numberOfMismatches.toDouble * (categoricalFieldCount.toDouble / values1.length.toDouble)
+
+    // categorical dist = # mismatches / # categorical attrbs = % mismatch (not x100% though)
+    // wgtd categorical dist = dist * (# categorical attrbs / total len)
+    val dist = numberOfMismatches / categoricalFieldCount.toDouble
+    val wgtdDist = dist * (categoricalFieldCount.toDouble / values1.length.toDouble)
+
+    if (DEBUG) {
+      println(s"Mismatches: ${numberOfMismatches} / ${categoricalFieldCount} --> dist = " + f"${wgtdDist}%.2f")
+    }
+
+    return wgtdDist
   }
 
   def getDistance(row1: Product, row2: Product): Double = {

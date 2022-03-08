@@ -12,3 +12,6 @@ Prune input and create weather and ride objects (March 3)
 
 Calculate euclidean + categorical distance between two rows (March 5)
  - Ethan Waite, 2 hours
+
+Review, test, debug, and clean distance measures. Add LOCAL condition in main (March 8)
+ - Laura McGann, 2 hours
