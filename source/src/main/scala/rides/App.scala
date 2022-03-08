@@ -133,11 +133,21 @@ object App {
     Logger.getLogger("org").setLevel(Level.OFF)
     Logger.getLogger("akka").setLevel(Level.OFF)
 
-    val conf = new SparkConf().setAppName("Distributed ridesharing")
+    val LOCAL = false    // change some config details if running locally
+
+    var conf = new SparkConf().setAppName("Distributed ridesharing")
+    if (LOCAL) {
+      conf = conf.setMaster("local[10]")
+    }
     val sc = new SparkContext(conf)
 
-    val rides = sc.textFile("./input/cab_rides.csv").map(parseRide).filter(_.price > -1)
-    val weather = sc.textFile("./input/weather.csv").map(parseWeather)
+    var path = "./input/"
+    if (LOCAL) {
+      // NOTE: change this to match your local data path, relative to the sbt package path
+      path = "../finalPrj/input/"
+    }
+    val rides = sc.textFile(path + "cab_rides.csv").map(parseRide).filter(_.price > -1)
+    val weather = sc.textFile(path + "weather.csv").map(parseWeather)
 
     // extremely basic example of using weather data
     val r1 = rides.take(1)(0)
