@@ -52,7 +52,7 @@ object App {
       case v: Double => 1
       case v: Float => 1
       case _ => 0
-    }).reduce((x, y) => x+y)
+    }).sum
 
     // numerical dist = sqrt(sum( (xi - yi)^2 ))
     // wgtd numerical dist = dist * (# numerical attrbs / total len)
@@ -75,7 +75,7 @@ object App {
     val categoricalFieldCount = values1.map({
       case v: String => 1
       case _ => 0
-    }).reduce((x, y) => x+y)
+    }).sum
 
     // categorical dist = # mismatches / # categorical attrbs = % mismatch (not x100% though)
     // wgtd categorical dist = dist * (# categorical attrbs / total len)
