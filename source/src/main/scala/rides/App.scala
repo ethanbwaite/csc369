@@ -53,7 +53,16 @@ object App {
       case v: Float => 1
       case _ => 0
     }).sum
-    return sqrt(sumOfSquaredDifferences) * (numericFieldCount.toDouble / values1.length.toDouble)
+
+    // numerical dist = sqrt(sum( (xi - yi)^2 ))
+    // wgtd numerical dist = dist * (# numerical attrbs / total len)
+    // TODO: standardize euclidean distance by range or z-score, else standardize all data to begin with
+    val dist = sqrt(sumOfSquaredDifferences) * (numericFieldCount.toDouble / values1.length.toDouble)
+
+    if (DEBUG) {
+      println("SSE = " + f"${sumOfSquaredDifferences}%.2f" + s" for ${numericFieldCount} elements --> dist = " + f"${dist}%.2f")
+    }
+    return dist
   }
 
   def weightedCategoricalDistance(values1: List[Any], values2: List[Any]): Double = {
@@ -67,7 +76,17 @@ object App {
       case v: String => 1
       case _ => 0
     }).sum
-    return numberOfMismatches.toDouble * (categoricalFieldCount.toDouble / values1.length.toDouble)
+
+    // categorical dist = # mismatches / # categorical attrbs = % mismatch (not x100% though)
+    // wgtd categorical dist = dist * (# categorical attrbs / total len)
+    // simplified: wgtd categorical dist = # mismatches / total len
+    val dist = numberOfMismatches / values1.length.toDouble
+
+    if (DEBUG) {
+      println(s"Mismatches: ${numberOfMismatches} / ${categoricalFieldCount} --> dist = " + f"${dist}%.2f")
+    }
+
+    return dist
   }
 
   def getDistance(row1: Product, row2: Product): Double = {
