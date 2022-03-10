@@ -37,6 +37,46 @@ case class Weather(
   val wind: Float
 )
 
+case class Record(
+  // Ride attributes (minus price)
+  val distance: Float,
+  val cabType: String,
+  val day: String,
+  val hour: Int,
+  val destination: String,
+  val source: String,
+  val surgeMultiplier: Double,
+  val name: String,
+  // Weather attributes
+  val temp: Float,
+  val location: String,
+  val clouds: Float,
+  val pressure: Float,
+  val rain: Float,
+  val humidity: Float,
+  val wind: Float
+)
+
+case class LabeledRecord(
+  // Ride attributes (with price)
+  val distance: Float,
+  val cabType: String,
+  val day: String,
+  val hour: Int,
+  val destination: String,
+  val source: String,
+  val surgeMultiplier: Double,
+  val name: String,
+  // Weather attributes
+  val temp: Float,
+  val location: String,
+  val clouds: Float,
+  val pressure: Float,
+  val rain: Float,
+  val humidity: Float,
+  val wind: Float
+)
+
 object App {
   val DEBUG = true
 
@@ -168,14 +208,38 @@ object App {
     val rides = sc.textFile(path + "cab_rides.csv").map(parseRide).filter(_.price > -1)
     val weather = sc.textFile(path + "weather.csv").map(parseWeather)
 
-    // extremely basic example of using weather data
-    val r1 = rides.take(1)(0)
-    val r2 = rides.take(2)(1)
-    println(r1)
-    println(r2)
-    println(getDistance(r1, r2))
+    val joined = rides.keyBy(
+      x => (x.day, x.hour)
+    ).leftOuterJoin(weather.keyBy(
+      x => (x.day, x.hour)
+    )).map({
+      case ((day, hour), (ride, Some(weather))) => Record(
+        ride.distance,
+        ride.cabType,
+        ride.day,
+        ride.hour,
+        ride.destination,
+        ride.source,
+        ride.surgeMultiplier,
+        ride.name,
+        weather.temp,
+        weather.location,
+        weather.clouds,
+        weather.pressure,
+        weather.rain,
+        weather.humidity,
+        weather.wind
+      )
+      case _ => None
+    })
 
-    // weather.collect().foreach(println)
-    // rides.collect().foreach(println)
+    // Get distance between two joined rows
+    val subset = joined.take(2)
+    val row1 = subset(0)
+    val row2 = subset(1)
+    val distance = getDistance(row1, row2)
+    println(f"Row 1: ${row1}")
+    println(f"Row 2: ${row2}")
+    println(f"Distance: ${distance}")
   }
 }
