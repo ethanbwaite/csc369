@@ -18,3 +18,6 @@ Review, test, debug, and clean distance measures. Add LOCAL condition in main (M
 
 General App config (March 8)
  - Laura McGann, 20 minutes
+
+Presentation and report basics (March 10)
+ - Ethan Zimbelman, 40 minutes
