@@ -18,6 +18,7 @@ case class Ride (
   val cabType: String,
   val day: String,
   val hour: Int,
+  val hourHalf: Int,
   val destination: String,
   val source: String,
   val price: Double,
@@ -25,7 +26,7 @@ case class Ride (
   val name: String
 )
 
-case class Weather(
+case class Weather (
   val temp: Float,
   val location: String,
   val clouds: Float,
@@ -33,23 +34,25 @@ case class Weather(
   val rain: Float,
   val day: String,
   val hour: Int,
+  val hourHalf: Int,
   val humidity: Float,
   val wind: Float
 )
 
-case class Record(
-  // Ride attributes (minus price)
+case class Record (
+  // Ride attributes
   val distance: Float,
   val cabType: String,
   val day: String,
   val hour: Int,
+  // val halfHour: Int, // for testing; 1 for first 30 mins, 2 for 2nd 30 mins
   val destination: String,
   val source: String,
   val surgeMultiplier: Double,
-  val name: String,
+  val rideName: String,
   // Weather attributes
   val temp: Float,
-  val location: String,
+  // val location: String, // rm bc should be same as ride source location
   val clouds: Float,
   val pressure: Float,
   val rain: Float,
@@ -57,25 +60,8 @@ case class Record(
   val wind: Float
 )
 
-case class LabeledRecord(
-  // Ride attributes (with price)
-  val distance: Float,
-  val cabType: String,
-  val day: String,
-  val hour: Int,
-  val destination: String,
-  val source: String,
-  val surgeMultiplier: Double,
-  val name: String,
-  // Weather attributes
-  val temp: Float,
-  val location: String,
-  val clouds: Float,
-  val pressure: Float,
-  val rain: Float,
-  val humidity: Float,
-  val wind: Float
-)
+// stores a Record for data distance comparison, label or "class value" is price
+case class LabeledRecord(r: Record, label: Double)
 
 object App {
   val DEBUG = true
@@ -135,6 +121,10 @@ object App {
     // Considers all Strings as categorical
     val values1 = row1.productIterator.toList
     val values2 = row2.productIterator.toList
+    if (DEBUG) {
+      println(s"Record 1: $values1")
+      println(s"Record 2: $values2")
+    }
     return weightedEuclideanDistance(values1, values2) + weightedCategoricalDistance(values1, values2)
   }
 
@@ -149,11 +139,17 @@ object App {
     return f.toFloat
   }
 
-  def timestampToDayHour(timestamp: Long): (String, Int) = {
+  def timestampToDayHourHalf(timestamp: Long): (String, Int, Int) = {
     // ZonedDateTime object in Boston time (UTC-5)
     // https://docs.oracle.com/javase/8/docs/api/java/time/ZonedDateTime.html
     val dt = ZonedDateTime.ofInstant(Instant.ofEpochSecond(timestamp), ZoneId.of("UTC-5"))
-    return (dt.getDayOfWeek.toString, dt.getHour)
+    val min = dt.getMinute
+    // compare if in first or second half of the hour (since weather msts take at 15mins and 45mins)
+    val halfOfHour = 1
+    if (min >= 30) {
+      val halfOfHour = 2
+    }
+    return (dt.getDayOfWeek.toString, dt.getHour, halfOfHour)
   }
 
   def parseRide(in: String): Ride = {
@@ -161,14 +157,14 @@ object App {
 
     val distance = floatOrZero(s(0))
     val cabType = s(1)
-    val time = timestampToDayHour(s(2).toLong)
+    val time = timestampToDayHourHalf(s(2).toLong)
     val destination = s(3)
     val source = s(4)
     val price = doubleOrDefault(s(5), -1.0)
     val surge = doubleOrDefault(s(6), 1.0)
     val name = s(9)
 
-    val ride = Ride(distance, cabType, time._1, time._2, destination, source, price, surge, name)
+    val ride = Ride(distance, cabType, time._1, time._2, time._3, destination, source, price, surge, name)
     return ride
   }
 
@@ -180,11 +176,11 @@ object App {
     val clouds = floatOrZero(s(2))
     val pressure = floatOrZero(s(3))
     val rain = floatOrZero(s(4))
-    val time = timestampToDayHour(s(5).toLong)
+    val time = timestampToDayHourHalf(s(5).toLong)
     val humidity = floatOrZero(s(6))
     val wind = floatOrZero(s(7))
 
-    val weather = Weather(temp, location, clouds, pressure, rain, time._1, time._2, humidity, wind)
+    val weather = Weather(temp, location, clouds, pressure, rain, time._1, time._2, time._3, humidity, wind)
     return weather
   }
 
@@ -206,14 +202,17 @@ object App {
       path = "../finalPrj/input/"
     }
     val rides = sc.textFile(path + "cab_rides.csv").map(parseRide).filter(_.price > -1)
-    val weather = sc.textFile(path + "weather.csv").map(parseWeather)
+    val weather = sc.textFile(path + "weather.csv").map(parseWeather).
+      keyBy((w => (w.location, w.day, w.hour, w.hourHalf))).  // key by future key (time and place)
+      reduceByKey((w1, w2) => w1).                            // keep only 1 weather reading per time
+      map({case (k, v) => v})                                 // restore data as Weather objects only, not (k,v) pairs
 
     val joined = rides.keyBy(
-      x => (x.day, x.hour)
+      x => (x.day, x.hour, x.hourHalf, x.source)
     ).leftOuterJoin(weather.keyBy(
-      x => (x.day, x.hour)
+      x => (x.day, x.hour, x.hourHalf, x.location)
     )).map({
-      case ((day, hour), (ride, Some(weather))) => Record(
+      case (k, (ride, Some(weather))) => LabeledRecord(Record(
         ride.distance,
         ride.cabType,
         ride.day,
@@ -223,23 +222,19 @@ object App {
         ride.surgeMultiplier,
         ride.name,
         weather.temp,
-        weather.location,
         weather.clouds,
         weather.pressure,
         weather.rain,
         weather.humidity,
         weather.wind
-      )
-      case _ => None
+      ), ride.price)    // ride price as the label
     })
 
     // Get distance between two joined rows
     val subset = joined.take(2)
     val row1 = subset(0)
     val row2 = subset(1)
-    val distance = getDistance(row1, row2)
-    println(f"Row 1: ${row1}")
-    println(f"Row 2: ${row2}")
+    val distance = getDistance(row1.r, row2.r)
     println(f"Distance: ${distance}")
   }
 }

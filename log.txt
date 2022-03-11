@@ -19,5 +19,8 @@ Review, test, debug, and clean distance measures. Add LOCAL condition in main (M
 General App config (March 8)
  - Laura McGann, 20 minutes
 
-Joined Rides and Weather and called getDistance on two rows to make sure it works
+Joined Rides and Weather and called getDistance on two rows to make sure it works (March 10)
  - Ethan Waite, 2 hours
+
+Edited join and Record classes: fixed problem of too many cross-product records (March 10)
+ - Laura McGann, 2 hours
