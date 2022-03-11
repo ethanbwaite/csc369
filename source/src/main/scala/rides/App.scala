@@ -14,6 +14,7 @@ import java.time.ZonedDateTime
 import java.time.Instant
 
 case class Ride (
+  val id: String,
   val distance: Float,
   val cabType: String,
   val day: String,
@@ -40,19 +41,17 @@ case class Weather (
 )
 
 case class Record (
-  // Ride attributes
+// Ride attributes
   val distance: Float,
   val cabType: String,
   val day: String,
   val hour: Int,
-  // val halfHour: Int, // for testing; 1 for first 30 mins, 2 for 2nd 30 mins
   val destination: String,
   val source: String,
   val surgeMultiplier: Double,
   val rideName: String,
-  // Weather attributes
+// Weather attributes
   val temp: Float,
-  // val location: String, // rm bc should be same as ride source location
   val clouds: Float,
   val pressure: Float,
   val rain: Float,
@@ -60,8 +59,23 @@ case class Record (
   val wind: Float
 )
 
-// stores a Record for data distance comparison, label or "class value" is price
-case class LabeledRecord(r: Record, label: Double)
+// stores a Record for data record distance comparison, label or "class value" is price
+case class LabeledRecord(id: String, r: Record, label: Double) {
+  var prediction: Double = -0.1   // set originally to negative value to indicate error (unset yet)
+
+  def setPrediction(pred: Double): Unit = {
+    prediction = pred
+  }
+
+  def getError(): Double = {
+    // this is the error case (i.e. no real prediction stored yet, so pass along the error negative value
+    if (prediction < 0) {
+      return prediction
+    }
+    // return the real error between prediction and true price
+    return abs(label - prediction)
+  }
+}
 
 object App {
   val DEBUG = true
@@ -162,9 +176,10 @@ object App {
     val source = s(4)
     val price = doubleOrDefault(s(5), -1.0)
     val surge = doubleOrDefault(s(6), 1.0)
+    val id = s(7)
     val name = s(9)
 
-    val ride = Ride(distance, cabType, time._1, time._2, time._3, destination, source, price, surge, name)
+    val ride = Ride(id, distance, cabType, time._1, time._2, time._3, destination, source, price, surge, name)
     return ride
   }
 
@@ -207,34 +222,106 @@ object App {
       reduceByKey((w1, w2) => w1).                            // keep only 1 weather reading per time
       map({case (k, v) => v})                                 // restore data as Weather objects only, not (k,v) pairs
 
+    // join ride and weather data on time and place, then store combined data in a LabeledRecord (label = price)
     val joined = rides.keyBy(
       x => (x.day, x.hour, x.hourHalf, x.source)
-    ).leftOuterJoin(weather.keyBy(
+    ).join(weather.keyBy(
       x => (x.day, x.hour, x.hourHalf, x.location)
     )).map({
-      case (k, (ride, Some(weather))) => LabeledRecord(Record(
-        ride.distance,
-        ride.cabType,
-        ride.day,
-        ride.hour,
-        ride.destination,
-        ride.source,
-        ride.surgeMultiplier,
-        ride.name,
-        weather.temp,
-        weather.clouds,
-        weather.pressure,
-        weather.rain,
-        weather.humidity,
-        weather.wind
-      ), ride.price)    // ride price as the label
+      case (k, (ride, weather)) => LabeledRecord(
+        ride.id,  // id for bookkeeping
+        Record(   // data to use for dist computation
+          ride.distance,
+          ride.cabType,
+          ride.day,
+          ride.hour,
+          ride.destination,
+          ride.source,
+          ride.surgeMultiplier,
+          ride.name,
+          weather.temp,
+          weather.clouds,
+          weather.pressure,
+          weather.rain,
+          weather.humidity,
+          weather.wind
+        ),
+        ride.price) // label = price
     })
 
-    // Get distance between two joined rows
-    val subset = joined.take(2)
-    val row1 = subset(0)
-    val row2 = subset(1)
-    val distance = getDistance(row1.r, row2.r)
-    println(f"Distance: ${distance}")
+    // split into train and test (TODO: and validation?)
+    val numRecords = joined.count()
+    val trainPercent = 0.001    // TODO: hyperparameter tuning
+    val numTrain = (numRecords * trainPercent).toInt    // number of records to include in training set; TODO: use real trainPercent = 0.8
+    val numTest = (numRecords * trainPercent).toInt // numRecords - numTrain; TODO: use real numTest
+    // take test set (rather than train set) first bc take() stores all in main mem, so keep amount small; take random sample (without replacement)
+    val test = sc.parallelize(joined.takeSample(false, (numTest.toInt))).persist()
+//    val train = joined.subtract(test).persist()   // train set is everything not in the test set
+    val train = sc.parallelize(joined.subtract(test).takeSample(false, numTrain.toInt)).persist() // TODO: go back to real train and test
+
+
+    println("\n--- Train and test split. ---")
+    println(s"$numRecords records total.")
+    println(f"${trainPercent * 100}%.2f" + s" train ($numTrain records)")
+    println(f"${(1 - trainPercent) * 100}%.2f" + s" test (${numTest} records)")
+
+    // for each item in the test set, calculate the avg predicted price from the prices of the k nearest neighbors
+    val percentNeighbors = 0.01   // % of total # data pts to use as k; TODO: hyperparameter tuning
+    val k = (percentNeighbors * numTrain).toInt   // if using val k straight up: val k = min(25, numTrain)
+
+    // find dists between all test and train records
+    val distMatrix = test.cartesian(train). // --> (rTest, rTrain)
+      // calc dists; keep only minimal data: test's id and label (price), train label (don't need id), dist
+      map({case (r1, r2) => (r1.id, (r1.label, r2.label, getDistance(r1.r, r2.r)))}). // --> (rTest_id, (rTest_price, rTrain_price, dist))
+      persist()
+
+    println("\n--- Distances calculated. ---")
+    distMatrix.take(10).foreach(println)
+
+    // find the dist of the kth nearest neighbor from each test record (i.e. the max dist of the neighbors)
+    val kthDists = distMatrix.groupByKey().  // group by test record
+      // list of (rTest_price, rTrain_price, dist)) tuples, sorted asc by dist; keep only the first (i.e. nearest) k
+      //  then keep only the furthest dist (so take the dist of the last (furthest) neighbor)
+      mapValues(v => v.toList.sortBy(r => r._3).take(k)(k-1)._3) // --> (rTest_id, maxDist)
+
+    println("\n--- Max dists for each test record found. ---")
+    kthDists.take(10).foreach(println)
+
+    // find the labels (prices) of each of rTest's k nearest neighbors
+    // (rTest_id, (rTest_price, rTrain_price, dist)) x (rTest_id, maxDist) = ((rTest_id, rTest_price), rTrain_price)
+    val kNearestNeighbors = distMatrix.join(kthDists).  // join on rTest which is (rTest_id, rTest_price)
+      filter({case (rTest_id, ((rTest_price, rTrain_price, dist) , maxDist)) => (maxDist >= dist)}).  // keep only k nearest
+      // keep only the (rTest_id, (rTest_price, rTrain_price)) info; rTrain_price to avg, rTest_price for eval later
+      map({case (rTest_id, ((rTest_price, rTrain_price, dist) , maxDist)) => ((rTest_id, rTest_price), rTrain_price)})
+
+    println("\n--- k nearest neighbors for each test record found. ---")
+    kNearestNeighbors.take(10).foreach(println)
+
+    // compute the avg price for each rTest; tuples coming in the form: ((rTest_id, rTest_price), rTrain_price)
+    val testPredictions = kNearestNeighbors.combineByKey(
+      v => (v, 1),  // set init accum = (sum, count) to (first train price, 1)
+      (acc: (Double, Int), v) => (acc._1 + v, acc._2 + 1),  // add next train price; incr count by 1
+      (acc1: (Double, Int), acc2: (Double, Int)) => (acc1._1 + acc2._1, acc1._2 + acc2._2)  // accum the accums
+    ).map({ case (rTest, value) => (rTest, value._1 * 1.0 / value._2) })  // ((rTest_id, rTest_price), avgTrainPrice)
+
+    println("\n--- Price predictions made. ---")
+    testPredictions.take(10).foreach(println)
+
+    // evaluate predictions: find the avg error
+    val errInfo = testPredictions.map({case ((id, real), pred) => abs(real - pred)}).  // rdd of errors
+      aggregate(0.0, 0) ((acc, newErr) => (acc._1 + newErr, acc._2 + 1),  // sum and count
+                         (x,y) => (x._1 + y._1, x._2 + y._2)) // add the sums and counts
+    val avgError = errInfo._1 / errInfo._2
+
+    println("\n--- Avg Error = " + f"$$$avgError%.2f" + " ---")
+
+//
+////    val testRecordDists = distMatrix.groupByKey().  // group by test record
+////      // list of (rTrain, dist) tuples, sorted asc by dist, then rTrain id; keep only the first (i.e. nearest) k
+////      mapValues(v => v.toList.sortBy(r => (r._2, r._1.id)).take(k)).
+////      mapValues(v => v.map({case (rTrain, dist) => rTrain.price})).   // extract only the price
+////      // TODO: aggregate(sum, count) to get avg price per testRecord --> classification
+////      mapValues(v => v.aggregate(0.0, 0)((accum, newPrice) => (accum._1 + newPrice, accum._2 + 1))).
+////      mapValues(v => v._1 / v._2)   // div sum by count to get avg price
   }
 }

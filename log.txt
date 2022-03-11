@@ -24,3 +24,6 @@ Joined Rides and Weather and called getDistance on two rows to make sure it work
 
 Edited join and Record classes: fixed problem of too many cross-product records (March 10)
  - Laura McGann, 2 hours
+
+KNN Implementation (March 10)
+ - Laura McGann, 3 hours
