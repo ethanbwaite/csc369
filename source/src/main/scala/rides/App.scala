@@ -251,13 +251,12 @@ object App {
 
     // split into train and test (TODO: and validation?)
     val numRecords = joined.count()
-    val trainPercent = 0.001    // TODO: hyperparameter tuning
-    val numTrain = (numRecords * trainPercent).toInt    // number of records to include in training set; TODO: use real trainPercent = 0.8
-    val numTest = (numRecords * trainPercent).toInt // numRecords - numTrain; TODO: use real numTest
+    val trainPercent = 0.8    // TODO: hyperparameter tuning
+    val numTrain = (numRecords * trainPercent).toInt    // number of records to include in training set
+    val numTest = (numRecords - numTrain).toInt
     // take test set (rather than train set) first bc take() stores all in main mem, so keep amount small; take random sample (without replacement)
-    val test = sc.parallelize(joined.takeSample(false, (numTest.toInt))).persist()
-//    val train = joined.subtract(test).persist()   // train set is everything not in the test set
-    val train = sc.parallelize(joined.subtract(test).takeSample(false, numTrain.toInt)).persist() // TODO: go back to real train and test
+    val test = sc.parallelize(joined.takeSample(false, (numTest))).persist()
+    val train = joined.subtract(test).persist()   // train set is everything not in the test set
 
 
     println("\n--- Train and test split. ---")
@@ -314,14 +313,5 @@ object App {
     val avgError = errInfo._1 / errInfo._2
 
     println("\n--- Avg Error = " + f"$$$avgError%.2f" + " ---")
-
-//
-////    val testRecordDists = distMatrix.groupByKey().  // group by test record
-////      // list of (rTrain, dist) tuples, sorted asc by dist, then rTrain id; keep only the first (i.e. nearest) k
-////      mapValues(v => v.toList.sortBy(r => (r._2, r._1.id)).take(k)).
-////      mapValues(v => v.map({case (rTrain, dist) => rTrain.price})).   // extract only the price
-////      // TODO: aggregate(sum, count) to get avg price per testRecord --> classification
-////      mapValues(v => v.aggregate(0.0, 0)((accum, newPrice) => (accum._1 + newPrice, accum._2 + 1))).
-////      mapValues(v => v._1 / v._2)   // div sum by count to get avg price
   }
 }
