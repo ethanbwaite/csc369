@@ -30,3 +30,6 @@ KNN Implementation (March 10)
 
 topByKey optimization (until servers stopped working)
  - Ethan Waite, 1 hours
+
+partition optimizations, persist changes, and time measurements (March 13)
+ - Ethan Zimbelman, 2 hours
