@@ -19,6 +19,9 @@ Review, test, debug, and clean distance measures. Add LOCAL condition in main (M
 General App config (March 8)
  - Laura McGann, 20 minutes
 
+Presentation and report basics (March 10)
+ - Ethan Zimbelman, 40 minutes
+
 Joined Rides and Weather and called getDistance on two rows to make sure it works (March 10)
  - Ethan Waite, 2 hours
 
@@ -28,7 +31,7 @@ Edited join and Record classes: fixed problem of too many cross-product records 
 KNN Implementation (March 10)
  - Laura McGann, 3 hours
 
-topByKey optimization (until servers stopped working)
+topByKey optimization (until servers stopped working, March 13)
  - Ethan Waite, 1 hours
 
 partition optimizations, persist changes, and time measurements (March 13)
