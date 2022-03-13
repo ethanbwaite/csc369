@@ -8,6 +8,7 @@ import org.apache.log4j.Logger
 import org.apache.log4j.Level
 import scala.collection._
 import scala.math._
+import org.apache.spark.mllib.rdd.MLPairRDDFunctions.fromPairRDD
 
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -199,6 +200,7 @@ object App {
     return weather
   }
 
+
   def main(args: Array[String]): Unit = {
     Logger.getLogger("org").setLevel(Level.OFF)
     Logger.getLogger("akka").setLevel(Level.OFF)
@@ -210,6 +212,8 @@ object App {
       conf = conf.setMaster("local[10]")
     }
     val sc = new SparkContext(conf)
+
+    // DATA SETUP  ------------------------------------------------------------------------------------------------------------------------
 
     var path = "./input/"
     if (LOCAL) {
@@ -249,24 +253,33 @@ object App {
         ride.price) // label = price
     })
 
+    // KNN FUNCTION SETUP  ------------------------------------------------------------------------------------------------------------------------
+    val t0 = System.currentTimeMillis()
+
+
     // split into train and test (TODO: and validation?)
     val numRecords = joined.count()
+    val joinedSubset = sc.parallelize(joined.take((numRecords * 0.01).toInt)) // Smaller sample size for development
+    val subsetSize = joinedSubset.count()
     val trainPercent = 0.8    // TODO: hyperparameter tuning
-    val numTrain = (numRecords * trainPercent).toInt    // number of records to include in training set
-    val numTest = (numRecords - numTrain).toInt
+    val numTrain = (subsetSize * trainPercent).toInt    // number of records to include in training set
+    val numTest = (subsetSize - numTrain).toInt
     // take test set (rather than train set) first bc take() stores all in main mem, so keep amount small; take random sample (without replacement)
-    val test = sc.parallelize(joined.takeSample(false, (numTest))).persist()
-    val train = joined.subtract(test).persist()   // train set is everything not in the test set
-
+    val test = sc.parallelize(joinedSubset.takeSample(false, (numTest))).persist()
+    val train = joinedSubset.subtract(test).persist()   // train set is everything not in the test set
 
     println("\n--- Train and test split. ---")
-    println(s"$numRecords records total.")
+    println(s"$subsetSize records total.")
     println(f"${trainPercent * 100}%.2f" + s" train ($numTrain records)")
     println(f"${(1 - trainPercent) * 100}%.2f" + s" test (${numTest} records)")
 
     // for each item in the test set, calculate the avg predicted price from the prices of the k nearest neighbors
     val percentNeighbors = 0.01   // % of total # data pts to use as k; TODO: hyperparameter tuning
     val k = (percentNeighbors * numTrain).toInt   // if using val k straight up: val k = min(25, numTrain)
+    println(f"K = ${k}")
+
+    // KNN CALCULATION  ------------------------------------------------------------------------------------------------------------------------
+
 
     // find dists between all test and train records
     val distMatrix = test.cartesian(train). // --> (rTest, rTrain)
@@ -278,13 +291,19 @@ object App {
     distMatrix.take(10).foreach(println)
 
     // find the dist of the kth nearest neighbor from each test record (i.e. the max dist of the neighbors)
-    val kthDists = distMatrix.groupByKey().  // group by test record
-      // list of (rTest_price, rTrain_price, dist)) tuples, sorted asc by dist; keep only the first (i.e. nearest) k
-      //  then keep only the furthest dist (so take the dist of the last (furthest) neighbor)
-      mapValues(v => v.toList.sortBy(r => r._3).take(k)(k-1)._3) // --> (rTest_id, maxDist)
-
     println("\n--- Max dists for each test record found. ---")
+    
+    val kthDists = distMatrix.topByKey(k)(Ordering[Double].reverse.on(_._3)).mapValues(x => x.maxBy(_._3)._3)
     kthDists.take(10).foreach(println)
+    val t1 = System.currentTimeMillis()
+    println("Elapsed time: " + (t1 - t0) + "ms")
+
+
+    // val kthDists = distMatrix.groupByKey().  // group by test record
+    //   // list of (rTest_price, rTrain_price, dist)) tuples, sorted asc by dist; keep only the first (i.e. nearest) k
+    //   //  then keep only the furthest dist (so take the dist of the last (furthest) neighbor)
+    //   mapValues(v => v.toList.sortBy(r => r._3).take(k)(k-1)._3) // --> (rTest_id, maxDist)
+
 
     // find the labels (prices) of each of rTest's k nearest neighbors
     // (rTest_id, (rTest_price, rTrain_price, dist)) x (rTest_id, maxDist) = ((rTest_id, rTest_price), rTrain_price)
