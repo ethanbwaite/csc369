@@ -200,6 +200,16 @@ object App {
     return weather
   }
 
+  def standardize(scores: List[Double]): List[Double] = {
+
+    val count = scores.count
+    val mean = scores.sum / count
+    val devs = scores.map(score => (score - mean) * (score - mean))
+    val stddev = Math.sqrt(devs.sum / count)
+    return scores.map(x => (x - mean)/stddev)
+
+  }
+
 
   def main(args: Array[String]): Unit = {
     Logger.getLogger("org").setLevel(Level.OFF)
