@@ -27,3 +27,6 @@ Edited join and Record classes: fixed problem of too many cross-product records 
 
 KNN Implementation (March 10)
  - Laura McGann, 3 hours
+
+topByKey optimization (until servers stopped working)
+ - Ethan Waite, 1 hours
