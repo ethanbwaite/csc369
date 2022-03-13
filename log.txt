@@ -36,3 +36,6 @@ topByKey optimization (until servers stopped working, March 13)
 
 partition optimizations, persist changes, and time measurements (March 13)
  - Ethan Zimbelman, 2 hours
+
+Presentation, report (March 13)
+ - Laura McGann, 2.5 hours
