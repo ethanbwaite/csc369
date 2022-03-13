@@ -2,7 +2,7 @@ package rides
 
 import org.apache.spark.SparkContext._
 import scala.io._
-import org.apache.spark.{ SparkConf, SparkContext }
+import org.apache.spark.{ HashPartitioner, SparkConf, SparkContext }
 import org.apache.spark.rdd._
 import org.apache.log4j.Logger
 import org.apache.log4j.Level
@@ -232,7 +232,7 @@ object App {
     ).join(weather.keyBy(
       x => (x.day, x.hour, x.hourHalf, x.location)
     )).map({
-      case (k, (ride, weather)) => LabeledRecord(
+      case (k, (ride, weather)) => ((k._1, k._2, k._3, k._4), LabeledRecord(
         ride.id,  // id for bookkeeping
         Record(   // data to use for dist computation
           ride.distance,
@@ -251,22 +251,22 @@ object App {
           weather.wind
         ),
         ride.price) // label = price
+      )
     })
 
     // KNN FUNCTION SETUP  ------------------------------------------------------------------------------------------------------------------------
-    val t0 = System.currentTimeMillis()
 
 
     // split into train and test (TODO: and validation?)
     val numRecords = joined.count()
-    val joinedSubset = sc.parallelize(joined.take((numRecords * 0.01).toInt)) // Smaller sample size for development
+    val joinedSubset = sc.parallelize(joined.take((numRecords * 0.02).toInt)) // Smaller sample size for development
     val subsetSize = joinedSubset.count()
     val trainPercent = 0.8    // TODO: hyperparameter tuning
     val numTrain = (subsetSize * trainPercent).toInt    // number of records to include in training set
     val numTest = (subsetSize - numTrain).toInt
     // take test set (rather than train set) first bc take() stores all in main mem, so keep amount small; take random sample (without replacement)
-    val test = sc.parallelize(joinedSubset.takeSample(false, (numTest))).persist()
-    val train = joinedSubset.subtract(test).persist()   // train set is everything not in the test set
+    val test = sc.parallelize(joinedSubset.takeSample(false, (numTest)))
+    val train = joinedSubset.subtract(test).partitionBy( new HashPartitioner(5)) // train set is everything not in the test set
 
     println("\n--- Train and test split. ---")
     println(s"$subsetSize records total.")
@@ -279,13 +279,13 @@ object App {
     println(f"K = ${k}")
 
     // KNN CALCULATION  ------------------------------------------------------------------------------------------------------------------------
-
+    val t0 = System.currentTimeMillis()
 
     // find dists between all test and train records
     val distMatrix = test.cartesian(train). // --> (rTest, rTrain)
       // calc dists; keep only minimal data: test's id and label (price), train label (don't need id), dist
-      map({case (r1, r2) => (r1.id, (r1.label, r2.label, getDistance(r1.r, r2.r)))}). // --> (rTest_id, (rTest_price, rTrain_price, dist))
-      persist()
+      map({case (r1, r2) => (r1._2.id, (r1._2.label, r2._2.label, getDistance(r1._2.r, r2._2.r)))}) // --> (rTest_id, (rTest_price, rTrain_price, dist))
+
 
     println("\n--- Distances calculated. ---")
     distMatrix.take(10).foreach(println)
