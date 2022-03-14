@@ -202,11 +202,12 @@ object App {
 
   def standardize(scores: List[Double]): List[Double] = {
 
-    val count = scores.count
-    val mean = scores.sum / count
+    val sumCount = scores.map(x => (x, 1)).reduce((x,y) => (x._1 + y._1, x._2 + y._2))
+    val mean = sumCount._1 / sumCount._2
     val devs = scores.map(score => (score - mean) * (score - mean))
-    val stddev = Math.sqrt(devs.sum / count)
+    val stddev = Math.sqrt(devs.sum / sumCount._2)
     return scores.map(x => (x - mean)/stddev)
+
 
   }
 
