@@ -238,110 +238,128 @@ object App {
       map({case (k, v) => v})                                 // restore data as Weather objects only, not (k,v) pairs
 
     // join ride and weather data on time and place, then store combined data in a LabeledRecord (label = price)
-    val joined = rides.keyBy(
-      x => (x.day, x.hour, x.hourHalf, x.source)
-    ).join(weather.keyBy(
-      x => (x.day, x.hour, x.hourHalf, x.location)
-    )).map({
-      case (k, (ride, weather)) => ((k._1, k._2, k._3, k._4), LabeledRecord(
-        ride.id,  // id for bookkeeping
-        Record(   // data to use for dist computation
-          ride.distance,
-          ride.cabType,
-          ride.day,
-          ride.hour,
-          ride.destination,
-          ride.source,
-          ride.surgeMultiplier,
-          ride.name,
-          weather.temp,
-          weather.clouds,
-          weather.pressure,
-          weather.rain,
-          weather.humidity,
-          weather.wind
-        ),
-        ride.price) // label = price
-      )
-    })
+    val joined = rides.keyBy(x => (x.day, x.hour, x.hourHalf, x.source))
+      .join(weather.keyBy(x => (x.day, x.hour, x.hourHalf, x.location)))
+      .map({
+        case (k, (ride, weather)) => ((k._1, k._2, k._3, k._4), LabeledRecord(
+          ride.id,  // id for bookkeeping
+          Record(   // data to use for dist computation
+            ride.distance,
+            ride.cabType,
+            ride.day,
+            ride.hour,
+            ride.destination,
+            ride.source,
+            ride.surgeMultiplier,
+            ride.name,
+            weather.temp,
+            weather.clouds,
+            weather.pressure,
+            weather.rain,
+            weather.humidity,
+            weather.wind
+          ),
+          ride.price) // label = price
+        )
+      })
 
     // KNN FUNCTION SETUP  ------------------------------------------------------------------------------------------------------------------------
-
+    val PERCENT_OF_DATA = 0.01
+    val TRAIN_PERCENT = 0.8
+    val K = 10
+    val RESULTS_TO_DISPLAY = 4
 
     // split into train and test (TODO: and validation?)
-    val numRecords = joined.count()
-    val joinedSubset = sc.parallelize(joined.take((numRecords * 0.02).toInt)) // Smaller sample size for development
-    val subsetSize = joinedSubset.count()
-    val trainPercent = 0.8    // TODO: hyperparameter tuning
-    val numTrain = (subsetSize * trainPercent).toInt    // number of records to include in training set
+    val recordSize = joined.count()
+    val subsetSize = (recordSize * PERCENT_OF_DATA).toInt
+    val joinedSubset = sc.parallelize(joined.take(subsetSize)) // Smaller sample size for development
+    val numTrain = (subsetSize * TRAIN_PERCENT).toInt    // number of records to include in training set
     val numTest = (subsetSize - numTrain).toInt
+    val k = min(K, numTrain).toInt
+
     // take test set (rather than train set) first bc take() stores all in main mem, so keep amount small; take random sample (without replacement)
     val test = sc.parallelize(joinedSubset.takeSample(false, (numTest)))
     val train = joinedSubset.subtract(test).partitionBy( new HashPartitioner(5)) // train set is everything not in the test set
 
     println("\n--- Train and test split. ---")
-    println(s"$subsetSize records total.")
-    println(f"${trainPercent * 100}%.2f" + s" train ($numTrain records)")
-    println(f"${(1 - trainPercent) * 100}%.2f" + s" test (${numTest} records)")
-
-    // for each item in the test set, calculate the avg predicted price from the prices of the k nearest neighbors
-    val percentNeighbors = 0.01   // % of total # data pts to use as k; TODO: hyperparameter tuning
-    val k = (percentNeighbors * numTrain).toInt   // if using val k straight up: val k = min(25, numTrain)
+    println(f"$subsetSize/$recordSize records used (${PERCENT_OF_DATA * 100}%.2f%%)")
+    println(f"\t${TRAIN_PERCENT * 100}%.2f%%" + s" train\t($numTrain records)")
+    println(f"\t${(1 - TRAIN_PERCENT) * 100}%.2f%%" + s" test\t($numTest records)")
     println(f"K = ${k}")
 
     // KNN CALCULATION  ------------------------------------------------------------------------------------------------------------------------
-    val t0 = System.currentTimeMillis()
+    // for each item in the test set, calculate the avg predicted price from the prices of the k nearest neighbors
 
-    // find dists between all test and train records
-    val distMatrix = test.cartesian(train). // --> (rTest, rTrain)
-      // calc dists; keep only minimal data: test's id and label (price), train label (don't need id), dist
-      map({case (r1, r2) => (r1._2.id, (r1._2.label, r2._2.label, getDistance(r1._2.r, r2._2.r)))}) // --> (rTest_id, (rTest_price, rTrain_price, dist))
 
+    /*** Distance matrix calculation (between test and training records ***/
+    val t0_dist = System.currentTimeMillis()
+
+    // TODO partition on distMatrix or kthDists
+    // rTest * rTrain -> (rTest_id, (rTest_price, rTrain_price, dist))
+    val distMatrix = test.cartesian(train)
+      .map({ case (r1, r2) => (r1._2.id, (r1._2.label, r2._2.label, getDistance(r1._2.r, r2._2.r)))})
 
     println("\n--- Distances calculated. ---")
-    distMatrix.take(10).foreach(println)
+    println(" *ride*\t\t*actual*\t*training*\t*distance*")
+    distMatrix.take(RESULTS_TO_DISPLAY)
+      .foreach(x => println(x._1.split("-")(0)
+        + "\t $" + (math rint x._2._1 * 100) / 100
+        + "\t\t $" + (math rint x._2._2 * 100) / 100
+        + "\t\t " + (math rint x._2._3 * 10000) / 10000
+        ))
+    val t1_dist = System.currentTimeMillis()
+    println(" > " + (t1_dist - t0_dist) + "ms elapsed")
 
-    // find the dist of the kth nearest neighbor from each test record (i.e. the max dist of the neighbors)
+
+    /*** Distance of Kth nearest neighbor for each ride in the test set ***/
+    val t0_k_dist = System.currentTimeMillis()
+    val kthDists = distMatrix.topByKey(k)(Ordering[Double].reverse.on(_._3))
+      .mapValues(x => x.maxBy(_._3)._3)
+
     println("\n--- Max dists for each test record found. ---")
-    
-    val kthDists = distMatrix.topByKey(k)(Ordering[Double].reverse.on(_._3)).mapValues(x => x.maxBy(_._3)._3)
-    kthDists.take(10).foreach(println)
-    val t1 = System.currentTimeMillis()
-    println("Elapsed time: " + (t1 - t0) + "ms")
+    println(" *ride*\t\t*distance*")
+    kthDists.take(RESULTS_TO_DISPLAY)
+      .foreach(x => println(x._1.split("-")(0) + "\t " + (math rint x._2 * 10000) / 10000))
+    val t1_k_dist = System.currentTimeMillis()
+    println(" > " + (t1_k_dist - t0_k_dist) + "ms elapsed")
 
 
-    // val kthDists = distMatrix.groupByKey().  // group by test record
-    //   // list of (rTest_price, rTrain_price, dist)) tuples, sorted asc by dist; keep only the first (i.e. nearest) k
-    //   //  then keep only the furthest dist (so take the dist of the last (furthest) neighbor)
-    //   mapValues(v => v.toList.sortBy(r => r._3).take(k)(k-1)._3) // --> (rTest_id, maxDist)
-
-
-    // find the labels (prices) of each of rTest's k nearest neighbors
-    // (rTest_id, (rTest_price, rTrain_price, dist)) x (rTest_id, maxDist) = ((rTest_id, rTest_price), rTrain_price)
-    val kNearestNeighbors = distMatrix.join(kthDists).  // join on rTest which is (rTest_id, rTest_price)
-      filter({case (rTest_id, ((rTest_price, rTrain_price, dist) , maxDist)) => (maxDist >= dist)}).  // keep only k nearest
-      // keep only the (rTest_id, (rTest_price, rTrain_price)) info; rTrain_price to avg, rTest_price for eval later
-      map({case (rTest_id, ((rTest_price, rTrain_price, dist) , maxDist)) => ((rTest_id, rTest_price), rTrain_price)})
+    /*** Find prices rTest's k nearest neighbors ***/
+    val t0_k_nearest = System.currentTimeMillis()
+    // (rTest_id, (rTest_price, rTrain_price, dist)) * (rTest_id, maxDist) -> ((rTest_id, rTest_price), rTrain_price)
+    val kNearestNeighbors = distMatrix.join(kthDists)
+      .filter({case (rTest_id, ((rTest_price, rTrain_price, dist) , maxDist)) => (maxDist >= dist)})  // keep only K nearest
+      .map({case (rTest_id, ((rTest_price, rTrain_price, dist) , maxDist)) => ((rTest_id, rTest_price), rTrain_price)})
 
     println("\n--- k nearest neighbors for each test record found. ---")
-    kNearestNeighbors.take(10).foreach(println)
+    println(" *ride*\t\t*actual*\t*neighbor*")
+    kNearestNeighbors.take(RESULTS_TO_DISPLAY)
+      .foreach(x => println(x._1._1.split("-")(0) + "\t $" + x._1._2 + "\t\t $" + x._2))
+    val t1_k_nearest = System.currentTimeMillis()
+    println(" > " + (t1_k_nearest - t0_k_nearest) + "ms elapsed")
 
-    // compute the avg price for each rTest; tuples coming in the form: ((rTest_id, rTest_price), rTrain_price)
+    /*** Compute average neighbor price for each rTest ***/
+    val t0_pred = System.currentTimeMillis()
+    // ((rTest_id, rTest_price), rTrain_price) -> (rTest_id, (rTest_price, avgTrain_price))
     val testPredictions = kNearestNeighbors.combineByKey(
       v => (v, 1),  // set init accum = (sum, count) to (first train price, 1)
       (acc: (Double, Int), v) => (acc._1 + v, acc._2 + 1),  // add next train price; incr count by 1
       (acc1: (Double, Int), acc2: (Double, Int)) => (acc1._1 + acc2._1, acc1._2 + acc2._2)  // accum the accums
-    ).map({ case (rTest, value) => (rTest, value._1 * 1.0 / value._2) })  // ((rTest_id, rTest_price), avgTrainPrice)
+    ).map({ case (rTest, value) => (rTest._1, ((math rint 100 * rTest._2) / 100, (math rint (value._1 * 100.0 / value._2)) / 100)) })
 
     println("\n--- Price predictions made. ---")
-    testPredictions.take(10).foreach(println)
+    println(" *ride*\t\t*actual*\t*prediction*")
+    testPredictions.take(RESULTS_TO_DISPLAY)
+      .foreach(x => println(x._1.split("-")(0) + "\t $" + x._2._1 + "\t\t $" + x._2._2))
+    val t1_pred = System.currentTimeMillis()
+    println(" > " + (t1_pred - t0_pred) + "ms elapsed")
 
-    // evaluate predictions: find the avg error
-    val errInfo = testPredictions.map({case ((id, real), pred) => abs(real - pred)}).  // rdd of errors
-      aggregate(0.0, 0) ((acc, newErr) => (acc._1 + newErr, acc._2 + 1),  // sum and count
-                         (x,y) => (x._1 + y._1, x._2 + y._2)) // add the sums and counts
+    /*** Evaluate predictions (the average error) ***/
+    val errInfo = testPredictions.map({ case (id, (real, pred)) => abs(real - pred) })  // rdd of errors
+      .aggregate(0.0, 0) ((acc, newErr) => (acc._1 + newErr, acc._2 + 1),  // sum and count
+                          (x,y) => (x._1 + y._1, x._2 + y._2)) // add the sums and counts
     val avgError = errInfo._1 / errInfo._2
 
-    println("\n--- Avg Error = " + f"$$$avgError%.2f" + " ---")
+    println("\n--- Avg Error = " + f"$$$avgError%.2f" + " ---\n")
   }
 }
