@@ -278,8 +278,8 @@ object App {
     val k = min(K, numTrain).toInt
 
     // take test set (rather than train set) first bc take() stores all in main mem, so keep amount small; take random sample (without replacement)
-    val test = sc.parallelize(joinedSubset.takeSample(false, (numTest)))
-    val train = joinedSubset.subtract(test).partitionBy( new HashPartitioner(5)) // train set is everything not in the test set
+    val test = sc.parallelize(joinedSubset.takeSample(false, numTest))
+    val train = joinedSubset.subtract(test).partitionBy(new HashPartitioner(5))
 
     println("\n--- Train and test split. ---")
     println(f"$subsetSize/$recordSize records used (${PERCENT_OF_DATA * 100}%.2f%%)")
@@ -294,10 +294,10 @@ object App {
     /*** Distance matrix calculation (between test and training records ***/
     val t0_dist = System.currentTimeMillis()
 
-    // TODO partition on distMatrix or kthDists
     // rTest * rTrain -> (rTest_id, (rTest_price, rTrain_price, dist))
     val distMatrix = test.cartesian(train)
       .map({ case (r1, r2) => (r1._2.id, (r1._2.label, r2._2.label, getDistance(r1._2.r, r2._2.r)))})
+      .partitionBy(new HashPartitioner(5))
 
     println("\n--- Distances calculated. ---")
     println(" *ride*\t\t*actual*\t*training*\t*distance*")
@@ -315,6 +315,7 @@ object App {
     val t0_k_dist = System.currentTimeMillis()
     val kthDists = distMatrix.topByKey(k)(Ordering[Double].reverse.on(_._3))
       .mapValues(x => x.maxBy(_._3)._3)
+      .partitionBy(new HashPartitioner(5))
 
     println("\n--- Max dists for each test record found. ---")
     println(" *ride*\t\t*distance*")
@@ -330,6 +331,7 @@ object App {
     val kNearestNeighbors = distMatrix.join(kthDists)
       .filter({case (rTest_id, ((rTest_price, rTrain_price, dist) , maxDist)) => (maxDist >= dist)})  // keep only K nearest
       .map({case (rTest_id, ((rTest_price, rTrain_price, dist) , maxDist)) => ((rTest_id, rTest_price), rTrain_price)})
+      .partitionBy(new HashPartitioner(5))
 
     println("\n--- k nearest neighbors for each test record found. ---")
     println(" *ride*\t\t*actual*\t*neighbor*")
