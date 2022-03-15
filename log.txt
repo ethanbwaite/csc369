@@ -20,7 +20,7 @@ General App config (March 8)
  - Laura McGann, 20 minutes
 
 Presentation and report basics (March 10)
- - Ethan Zimbelman, 40 minutes
+ - Ethan Zimbelman, .5 hours
 
 Joined Rides and Weather and called getDistance on two rows to make sure it works (March 10)
  - Ethan Waite, 2 hours
@@ -34,8 +34,11 @@ KNN Implementation (March 10)
 topByKey optimization (until servers stopped working, March 13)
  - Ethan Waite, 1 hours
 
-partition optimizations, persist changes, and time measurements (March 13)
- - Ethan Zimbelman, 2 hours
+Scala optimizations and time measurements + presentation/report (March 13)
+ - Ethan Zimbelman, 2.5 hours
 
 Presentation, report (March 13)
  - Laura McGann, 2.5 hours
+
+KNN hyperparameterizations + presentation/report (March 14)
+ - Ethan Zimbelman, 3.5 hours
