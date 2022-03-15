@@ -200,15 +200,25 @@ object App {
     return weather
   }
 
-  def standardize(scores: List[Double]): List[Double] = {
+    //Takes all rides and returns another RDD with the distances replaced with the zscores of distances
+  def standardizeRides(rideRdd: RDD[Ride]): RDD[Ride] = {
+    val sumCount = rideRdd.map(x => (x.distance, 1)).reduce((x,y) => (x._1 + y._1, x._2 + y._2))
+    val mean = sumCount._1 / 1.0 * sumCount._2
+    val devs = rideRdd.map(x => (pow((x.distance - mean),2))).reduce((x,y)=>x+y)
+    val stddev = Math.sqrt(devs / 1.0 *(sumCount._2 - 1))
+    val zscores = rideRdd.map(x => Ride(x.id,
+      ((x.distance - mean)/1.0 * stddev).toFloat,
+      x.cabType,
+      x.day,
+      x.hour,
+      x.hourHalf,
+      x.destination,
+      x.source,
+      x.price,
+      x.surgeMultiplier,
+      x.name))
 
-    val sumCount = scores.map(x => (x, 1)).reduce((x,y) => (x._1 + y._1, x._2 + y._2))
-    val mean = sumCount._1 / sumCount._2
-    val devs = scores.map(score => (score - mean) * (score - mean))
-    val stddev = Math.sqrt(devs.sum / sumCount._2)
-    return scores.map(x => (x - mean)/stddev)
-
-
+    return zscores
   }
 
 
@@ -231,7 +241,7 @@ object App {
       // NOTE: change this to match your local data path, relative to the sbt package path
       path = "../finalPrj/input/"
     }
-    val rides = sc.textFile(path + "cab_rides.csv").map(parseRide).filter(_.price > -1)
+    val rides = standardizeRides(sc.textFile(path + "cab_rides.csv").map(parseRide).filter(_.price > -1))
     val weather = sc.textFile(path + "weather.csv").map(parseWeather).
       keyBy((w => (w.location, w.day, w.hour, w.hourHalf))).  // key by future key (time and place)
       reduceByKey((w1, w2) => w1).                            // keep only 1 weather reading per time
