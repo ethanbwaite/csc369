@@ -23,8 +23,5 @@ program.
 
 ## Deliverables
 
-Before submission, the following must be converted to `slides.pdf` and
-`report.pdf` respectively.
-
  - [presentation slides](https://docs.google.com/presentation/d/1ygSLH_IqH7dF4e9iZE1dgqhRUACl5WMx_TiYJVA49vI/edit?usp=sharing)
  - [final report](https://docs.google.com/document/d/1bvpbT2DmOuvZ0I8sFsQFajMB8Kf4MUByAWQ7x-kZLnk/edit?usp=sharing)
