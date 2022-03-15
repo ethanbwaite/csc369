@@ -300,7 +300,7 @@ object App {
       .partitionBy(new HashPartitioner(5))
 
     println("\n--- Distances calculated. ---")
-    println(" *ride*\t\t*actual*\t*training*\t*distance*")
+    if (RESULTS_TO_DISPLAY > 0) println(" *ride*\t\t*actual*\t*training*\t*distance*")
     distMatrix.take(RESULTS_TO_DISPLAY)
       .foreach(x => println(x._1.split("-")(0)
         + "\t $" + (math rint x._2._1 * 100) / 100
@@ -318,7 +318,7 @@ object App {
       .partitionBy(new HashPartitioner(5))
 
     println("\n--- Max dists for each test record found. ---")
-    println(" *ride*\t\t*distance*")
+    if (RESULTS_TO_DISPLAY > 0) println(" *ride*\t\t*distance*")
     kthDists.take(RESULTS_TO_DISPLAY)
       .foreach(x => println(x._1.split("-")(0) + "\t " + (math rint x._2 * 10000) / 10000))
     val t1_k_dist = System.currentTimeMillis()
@@ -334,7 +334,7 @@ object App {
       .partitionBy(new HashPartitioner(5))
 
     println("\n--- k nearest neighbors for each test record found. ---")
-    println(" *ride*\t\t*actual*\t*neighbor*")
+    if (RESULTS_TO_DISPLAY > 0) println(" *ride*\t\t*actual*\t*neighbor*")
     kNearestNeighbors.take(RESULTS_TO_DISPLAY)
       .foreach(x => println(x._1._1.split("-")(0) + "\t $" + x._1._2 + "\t\t $" + x._2))
     val t1_k_nearest = System.currentTimeMillis()
@@ -350,7 +350,7 @@ object App {
     ).map({ case (rTest, value) => (rTest._1, ((math rint 100 * rTest._2) / 100, (math rint (value._1 * 100.0 / value._2)) / 100)) })
 
     println("\n--- Price predictions made. ---")
-    println(" *ride*\t\t*actual*\t*prediction*")
+    if (RESULTS_TO_DISPLAY > 0) println(" *ride*\t\t*actual*\t*prediction*")
     testPredictions.take(RESULTS_TO_DISPLAY)
       .foreach(x => println(x._1.split("-")(0) + "\t $" + x._2._1 + "\t\t $" + x._2._2))
     val t1_pred = System.currentTimeMillis()
@@ -362,6 +362,11 @@ object App {
                           (x,y) => (x._1 + y._1, x._2 + y._2)) // add the sums and counts
     val avgError = errInfo._1 / errInfo._2
 
-    println("\n--- Avg Error = " + f"$$$avgError%.2f" + " ---\n")
+    println("\n--- Output. ---")
+    println(f"$subsetSize/$recordSize records used (${PERCENT_OF_DATA * 100}%.2f%%)")
+    println(f"\t${TRAIN_PERCENT * 100}%.2f%%" + s" train\t($numTrain records)")
+    println(f"\t${(1 - TRAIN_PERCENT) * 100}%.2f%%" + s" test\t($numTest records)")
+    println(f"K = ${k}")
+    println(f" > average error := $$$avgError%.2f \n")
   }
 }
